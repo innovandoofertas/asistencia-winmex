@@ -16,6 +16,8 @@ type Empleado = {
   nombre: string;
   telefono: string | null;
   sucursal_id: string;
+  pin: string | null;
+  rol: string | null;
   sucursales_asistencia: Sucursal | null;
 };
 
@@ -98,13 +100,33 @@ export default function Home() {
 
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [empleadoId, setEmpleadoId] = useState("");
+  const [pin, setPin] = useState("");
+  const [empleadoLogueado, setEmpleadoLogueado] = useState<Empleado | null>(
+    null
+  );
   const [mensaje, setMensaje] = useState("Cargando empleados...");
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
     cargarEmpleados();
     iniciarCamara();
+
+    const guardado = localStorage.getItem("empleadoWinmexId");
+    if (guardado) {
+      setEmpleadoId(guardado);
+    }
   }, []);
+
+  useEffect(() => {
+    if (empleados.length > 0 && empleadoId) {
+      const empleado = empleados.find((e) => e.id === empleadoId);
+      const sesionActiva = localStorage.getItem("sesionWinmexActiva");
+
+      if (empleado && sesionActiva === "true") {
+        setEmpleadoLogueado(empleado);
+      }
+    }
+  }, [empleados, empleadoId]);
 
   async function cargarEmpleados() {
     const { data, error } = await supabase
@@ -114,6 +136,8 @@ export default function Home() {
         nombre,
         telefono,
         sucursal_id,
+        pin,
+        rol,
         sucursales_asistencia (
           id,
           nombre,
@@ -133,6 +157,37 @@ export default function Home() {
 
     setEmpleados((data || []) as unknown as Empleado[]);
     setMensaje("");
+  }
+
+  function iniciarSesion() {
+    const empleado = empleados.find((e) => e.id === empleadoId);
+
+    if (!empleado) {
+      setMensaje("Selecciona tu nombre.");
+      return;
+    }
+
+    if (!pin.trim()) {
+      setMensaje("Escribe tu PIN.");
+      return;
+    }
+
+    if (empleado.pin !== pin.trim()) {
+      setMensaje("PIN incorrecto. Intenta de nuevo.");
+      return;
+    }
+
+    setEmpleadoLogueado(empleado);
+    localStorage.setItem("empleadoWinmexId", empleado.id);
+    localStorage.setItem("sesionWinmexActiva", "true");
+    setMensaje(`Bienvenido, ${empleado.nombre}.`);
+  }
+
+  function cerrarSesion() {
+    setEmpleadoLogueado(null);
+    setPin("");
+    localStorage.removeItem("sesionWinmexActiva");
+    setMensaje("Sesión cerrada.");
   }
 
   async function iniciarCamara() {
@@ -220,10 +275,10 @@ export default function Home() {
       setCargando(true);
       setMensaje("📍 Obteniendo ubicación y tomando selfie...");
 
-      const empleado = empleados.find((e) => e.id === empleadoId);
+      const empleado = empleadoLogueado;
 
       if (!empleado) {
-        setMensaje("Selecciona un empleado.");
+        setMensaje("Primero inicia sesión con tu PIN.");
         return;
       }
 
@@ -292,25 +347,15 @@ export default function Home() {
     <main
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #dc2626 100%)",
+        background:
+          "linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #dc2626 100%)",
         padding: 20,
         fontFamily: "Arial, sans-serif",
         color: "#ffffff",
       }}
     >
-      <div
-        style={{
-          maxWidth: 480,
-          margin: "0 auto",
-        }}
-      >
-        <section
-          style={{
-            textAlign: "center",
-            marginBottom: 18,
-            paddingTop: 10,
-          }}
-        >
+      <div style={{ maxWidth: 480, margin: "0 auto" }}>
+        <section style={{ textAlign: "center", marginBottom: 18, paddingTop: 10 }}>
           <h1
             style={{
               fontSize: 34,
@@ -343,88 +388,152 @@ export default function Home() {
             boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
           }}
         >
-          <label
-            style={{
-              display: "block",
-              fontWeight: "bold",
-              marginBottom: 8,
-              fontSize: 15,
-            }}
-          >
-            Empleado
-          </label>
+          {!empleadoLogueado && (
+            <>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: "bold",
+                  marginBottom: 8,
+                  fontSize: 15,
+                }}
+              >
+                Empleado
+              </label>
 
-          <select
-            value={empleadoId}
-            onChange={(e) => setEmpleadoId(e.target.value)}
-            style={{
-              padding: 14,
-              width: "100%",
-              fontSize: 17,
-              borderRadius: 12,
-              border: "2px solid #cbd5e1",
-              color: "#000000",
-              background: "#ffffff",
-              marginBottom: 18,
-            }}
-          >
-            <option value="">Selecciona empleado</option>
-            {empleados.map((empleado) => (
-              <option key={empleado.id} value={empleado.id}>
-                {empleado.nombre}
-              </option>
-            ))}
-          </select>
+              <select
+                value={empleadoId}
+                onChange={(e) => setEmpleadoId(e.target.value)}
+                style={{
+                  padding: 14,
+                  width: "100%",
+                  fontSize: 17,
+                  borderRadius: 12,
+                  border: "2px solid #cbd5e1",
+                  color: "#000000",
+                  background: "#ffffff",
+                  marginBottom: 14,
+                }}
+              >
+                <option value="">Selecciona empleado</option>
+                {empleados.map((empleado) => (
+                  <option key={empleado.id} value={empleado.id}>
+                    {empleado.nombre}
+                  </option>
+                ))}
+              </select>
 
-          <div
-            style={{
-              borderRadius: 18,
-              overflow: "hidden",
-              background: "#111827",
-              border: "4px solid #0f172a",
-              marginBottom: 18,
-            }}
-          >
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{
-                width: "100%",
-                display: "block",
-                minHeight: 260,
-                objectFit: "cover",
-              }}
-            />
-          </div>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: "bold",
+                  marginBottom: 8,
+                  fontSize: 15,
+                }}
+              >
+                PIN
+              </label>
 
-          {empleadoSeleccionado && (
-            <div
-              style={{
-                background: "#f8fafc",
-                border: "1px solid #cbd5e1",
-                borderRadius: 16,
-                padding: 14,
-                marginBottom: 16,
-              }}
-            >
-              <p style={{ margin: "0 0 8px 0", fontSize: 16 }}>
-                👤 Empleado: <b>{empleadoSeleccionado.nombre}</b>
-              </p>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="Escribe tu PIN"
+                style={{
+                  padding: 14,
+                  width: "100%",
+                  fontSize: 20,
+                  borderRadius: 12,
+                  border: "2px solid #cbd5e1",
+                  color: "#000000",
+                  background: "#ffffff",
+                  marginBottom: 16,
+                  boxSizing: "border-box",
+                  textAlign: "center",
+                  letterSpacing: 4,
+                }}
+              />
 
-              <p style={{ margin: 0, fontSize: 16 }}>
-                🏢 Sucursal:{" "}
-                <b>
-                  {empleadoSeleccionado.sucursales_asistencia?.nombre ||
-                    "Sin sucursal"}
-                </b>
-              </p>
-            </div>
+              <button
+                onClick={iniciarSesion}
+                style={{
+                  width: "100%",
+                  padding: 16,
+                  fontSize: 18,
+                  borderRadius: 14,
+                  border: "none",
+                  background: "#0f172a",
+                  color: "#ffffff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                🔐 Iniciar sesión
+              </button>
+
+              {empleadoSeleccionado && (
+                <p
+                  style={{
+                    marginTop: 14,
+                    textAlign: "center",
+                    color: "#475569",
+                  }}
+                >
+                  Usuario seleccionado: <b>{empleadoSeleccionado.nombre}</b>
+                </p>
+              )}
+            </>
           )}
 
-          {empleadoSeleccionado && (
-            <div>
+          {empleadoLogueado && (
+            <>
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 16,
+                  padding: 14,
+                  marginBottom: 16,
+                }}
+              >
+                <p style={{ margin: "0 0 8px 0", fontSize: 16 }}>
+                  👤 Empleado: <b>{empleadoLogueado.nombre}</b>
+                </p>
+
+                <p style={{ margin: 0, fontSize: 16 }}>
+                  🏢 Sucursal:{" "}
+                  <b>
+                    {empleadoLogueado.sucursales_asistencia?.nombre ||
+                      "Sin sucursal"}
+                  </b>
+                </p>
+              </div>
+
+              <div
+                style={{
+                  borderRadius: 18,
+                  overflow: "hidden",
+                  background: "#111827",
+                  border: "4px solid #0f172a",
+                  marginBottom: 18,
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    width: "100%",
+                    display: "block",
+                    minHeight: 260,
+                    objectFit: "cover",
+                  }}
+                />
+              </div>
+
               <button
                 onClick={() => registrar("entrada")}
                 disabled={cargando}
@@ -464,7 +573,26 @@ export default function Home() {
               >
                 🚪 Registrar salida
               </button>
-            </div>
+
+              <button
+                onClick={cerrarSesion}
+                disabled={cargando}
+                style={{
+                  width: "100%",
+                  padding: 13,
+                  marginTop: 12,
+                  fontSize: 16,
+                  borderRadius: 14,
+                  border: "none",
+                  background: "#334155",
+                  color: "#ffffff",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                Cerrar sesión
+              </button>
+            </>
           )}
 
           {mensaje && (
@@ -475,12 +603,16 @@ export default function Home() {
                 borderRadius: 14,
                 background: mensaje.includes("registrada")
                   ? "#dcfce7"
-                  : mensaje.includes("No se pudo") || mensaje.includes("Error")
+                  : mensaje.includes("incorrecto") ||
+                    mensaje.includes("No se pudo") ||
+                    mensaje.includes("Error")
                   ? "#fee2e2"
                   : "#e0f2fe",
                 color: mensaje.includes("registrada")
                   ? "#166534"
-                  : mensaje.includes("No se pudo") || mensaje.includes("Error")
+                  : mensaje.includes("incorrecto") ||
+                    mensaje.includes("No se pudo") ||
+                    mensaje.includes("Error")
                   ? "#991b1b"
                   : "#075985",
                 fontWeight: "bold",
