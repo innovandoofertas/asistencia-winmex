@@ -19,6 +19,7 @@ type Empleado = {
   sucursal_id: string | null;
   activo: boolean;
   rol: string | null;
+  pin: string | null;
   created_at: string;
   sucursales_asistencia: { nombre: string } | null;
 };
@@ -54,16 +55,6 @@ const tdStyle = {
   color: "#000000",
 };
 
-const sectionStyle = {
-  border: "1px solid #cbd5e1",
-  borderRadius: 16,
-  padding: 20,
-  marginBottom: 30,
-  background: "rgba(255,255,255,0.96)",
-  backdropFilter: "blur(8px)",
-  color: "#000000",
-};
-
 export default function AdminPage() {
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
@@ -76,6 +67,8 @@ export default function AdminPage() {
 
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoTelefono, setNuevoTelefono] = useState("");
+  const [nuevoPin, setNuevoPin] = useState("");
+  const [nuevoRol, setNuevoRol] = useState("empleado");
   const [nuevaSucursalId, setNuevaSucursalId] = useState("");
 
   const [sucursalNombre, setSucursalNombre] = useState("");
@@ -91,7 +84,11 @@ export default function AdminPage() {
 
   async function cargarTodo() {
     setMensaje("Cargando...");
-    await Promise.all([cargarAsistencias(), cargarEmpleados(), cargarSucursales()]);
+    await Promise.all([
+      cargarAsistencias(),
+      cargarEmpleados(),
+      cargarSucursales(),
+    ]);
     setMensaje("");
   }
 
@@ -134,6 +131,7 @@ export default function AdminPage() {
         sucursal_id,
         activo,
         rol,
+        pin,
         created_at,
         sucursales_asistencia ( nombre )
       `)
@@ -160,13 +158,24 @@ export default function AdminPage() {
       return;
     }
 
-    const lista = (data || []) as Sucursal[];
-    setSucursales(lista);
+    setSucursales((data || []) as Sucursal[]);
 
-    const activas = lista.filter((s) => s.activa);
+    const activas = (data || []).filter((s) => s.activa);
     if (!nuevaSucursalId && activas.length > 0) {
       setNuevaSucursalId(activas[0].id);
     }
+  }
+
+  function editarEmpleadoLocal(
+    empleadoId: string,
+    campo: keyof Empleado,
+    valor: string | boolean | null
+  ) {
+    setEmpleados((actuales) =>
+      actuales.map((empleado) =>
+        empleado.id === empleadoId ? { ...empleado, [campo]: valor } : empleado
+      )
+    );
   }
 
   async function agregarEmpleado() {
@@ -174,6 +183,11 @@ export default function AdminPage() {
 
     if (!nombreLimpio) {
       alert("Escribe el nombre del empleado.");
+      return;
+    }
+
+    if (!nuevoPin.trim()) {
+      alert("Escribe un PIN para el empleado.");
       return;
     }
 
@@ -185,9 +199,10 @@ export default function AdminPage() {
     const { error } = await supabase.from("empleados_asistencia").insert({
       nombre: nombreLimpio,
       telefono: nuevoTelefono.trim() || null,
+      pin: nuevoPin.trim(),
+      rol: nuevoRol || "empleado",
       sucursal_id: nuevaSucursalId,
       activo: true,
-      rol: "empleado",
     });
 
     if (error) {
@@ -198,38 +213,43 @@ export default function AdminPage() {
 
     setNuevoNombre("");
     setNuevoTelefono("");
+    setNuevoPin("");
+    setNuevoRol("empleado");
     await cargarEmpleados();
     alert("Empleado agregado.");
   }
 
-  async function cambiarActivo(empleado: Empleado) {
+  async function guardarEmpleado(empleado: Empleado) {
+    if (!empleado.nombre.trim()) {
+      alert("El nombre no puede quedar vacío.");
+      return;
+    }
+
+    if (!empleado.pin || !empleado.pin.trim()) {
+      alert("El PIN no puede quedar vacío.");
+      return;
+    }
+
     const { error } = await supabase
       .from("empleados_asistencia")
-      .update({ activo: !empleado.activo })
+      .update({
+        nombre: empleado.nombre.trim(),
+        telefono: empleado.telefono?.trim() || null,
+        pin: empleado.pin.trim(),
+        rol: empleado.rol || "empleado",
+        sucursal_id: empleado.sucursal_id,
+        activo: empleado.activo,
+      })
       .eq("id", empleado.id);
 
     if (error) {
       console.error(error);
-      alert("No se pudo actualizar el empleado.");
+      alert("No se pudo guardar el empleado.");
       return;
     }
 
     await cargarEmpleados();
-  }
-
-  async function cambiarSucursal(empleadoId: string, sucursalId: string) {
-    const { error } = await supabase
-      .from("empleados_asistencia")
-      .update({ sucursal_id: sucursalId || null })
-      .eq("id", empleadoId);
-
-    if (error) {
-      console.error(error);
-      alert("No se pudo cambiar la sucursal.");
-      return;
-    }
-
-    await cargarEmpleados();
+    alert("Cambios guardados.");
   }
 
   async function agregarSucursal() {
@@ -345,7 +365,10 @@ export default function AdminPage() {
     (a) => a.puntualidad === "retardo" || a.puntualidad === "retardo_grave"
   );
 
-  const fueraDeZonaHoy = asistenciasHoy.filter((a) => a.estado === "fuera_de_zona");
+  const fueraDeZonaHoy = asistenciasHoy.filter(
+    (a) => a.estado === "fuera_de_zona"
+  );
+
   const salidasAnticipadasHoy = asistenciasHoy.filter(
     (a) => a.puntualidad === "salida_anticipada"
   );
@@ -360,7 +383,9 @@ export default function AdminPage() {
       const registros = asistenciasHoy
         .filter((a) => a.empleado_id === empleado.id)
         .sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          (a, b) =>
+            new Date(a.created_at).getTime() -
+            new Date(b.created_at).getTime()
         );
 
       const entradas = registros.filter((r) => r.tipo === "entrada");
@@ -374,7 +399,9 @@ export default function AdminPage() {
 
       if (entrada && !salida) {
         estatus = "Trabajando";
-        horas = formatoHorasMinutos(calcularMinutosTrabajados(entrada.created_at));
+        horas = formatoHorasMinutos(
+          calcularMinutosTrabajados(entrada.created_at)
+        );
       }
 
       if (entrada && salida) {
@@ -385,7 +412,8 @@ export default function AdminPage() {
       }
 
       const tieneRetardo = registros.some(
-        (r) => r.puntualidad === "retardo" || r.puntualidad === "retardo_grave"
+        (r) =>
+          r.puntualidad === "retardo" || r.puntualidad === "retardo_grave"
       );
 
       const salidaAnticipada = registros.some(
@@ -407,9 +435,17 @@ export default function AdminPage() {
       };
     });
 
-  const trabajandoAhora = resumenHoy.filter((r) => r.estatus === "Trabajando").length;
-  const noHanLlegado = resumenHoy.filter((r) => r.estatus === "No ha llegado").length;
-  const yaSalieron = resumenHoy.filter((r) => r.estatus === "Ya salió").length;
+  const trabajandoAhora = resumenHoy.filter(
+    (r) => r.estatus === "Trabajando"
+  ).length;
+
+  const noHanLlegado = resumenHoy.filter(
+    (r) => r.estatus === "No ha llegado"
+  ).length;
+
+  const yaSalieron = resumenHoy.filter(
+    (r) => r.estatus === "Ya salió"
+  ).length;
 
   const inicioSemana = new Date();
   const diaSemana = inicioSemana.getDay();
@@ -422,7 +458,9 @@ export default function AdminPage() {
   );
 
   const resumenSemanal = empleados.map((empleado) => {
-    const registros = asistenciasSemana.filter((a) => a.empleado_id === empleado.id);
+    const registros = asistenciasSemana.filter(
+      (a) => a.empleado_id === empleado.id
+    );
 
     const entradas = registros.filter((r) => r.tipo === "entrada");
     const salidas = registros.filter((r) => r.tipo === "salida");
@@ -452,7 +490,9 @@ export default function AdminPage() {
     const registros = asistenciasSemana
       .filter((a) => a.empleado_id === empleado.id)
       .sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        (a, b) =>
+          new Date(a.created_at).getTime() -
+          new Date(b.created_at).getTime()
       );
 
     let minutosSemana = 0;
@@ -460,18 +500,18 @@ export default function AdminPage() {
     const entradas = registros.filter((r) => r.tipo === "entrada");
     const salidas = registros.filter((r) => r.tipo === "salida");
 
-    const salidasUsadas = new Set<string>();
-
     entradas.forEach((entrada) => {
       const salida = salidas.find(
         (s) =>
-          !salidasUsadas.has(s.id) &&
-          new Date(s.created_at).getTime() > new Date(entrada.created_at).getTime()
+          new Date(s.created_at).getTime() >
+          new Date(entrada.created_at).getTime()
       );
 
       if (salida) {
-        salidasUsadas.add(salida.id);
-        minutosSemana += calcularMinutosTrabajados(entrada.created_at, salida.created_at);
+        minutosSemana += calcularMinutosTrabajados(
+          entrada.created_at,
+          salida.created_at
+        );
       }
     });
 
@@ -483,7 +523,8 @@ export default function AdminPage() {
       (r) => r.puntualidad === "salida_anticipada"
     ).length;
 
-    const fueraZona = registros.filter((r) => r.estado === "fuera_de_zona").length;
+    const fueraZona = registros.filter((r) => r.estado === "fuera_de_zona")
+      .length;
 
     return {
       empleado: empleado.nombre,
@@ -534,7 +575,12 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  function tarjeta(titulo: string, valor: number, descripcion: string, color: string) {
+  function tarjeta(
+    titulo: string,
+    valor: number,
+    descripcion: string,
+    color: string
+  ) {
     return (
       <div
         style={{
@@ -547,7 +593,9 @@ export default function AdminPage() {
         }}
       >
         <h3 style={{ margin: 0, fontSize: 18 }}>{titulo}</h3>
-        <p style={{ fontSize: 56, fontWeight: "bold", margin: "10px 0" }}>{valor}</p>
+        <p style={{ fontSize: 56, fontWeight: "bold", margin: "10px 0" }}>
+          {valor}
+        </p>
         <small style={{ fontSize: 14 }}>{descripcion}</small>
       </div>
     );
@@ -580,6 +628,7 @@ export default function AdminPage() {
           }}
         >
           <h1 style={{ marginTop: 0, fontSize: 30 }}>🔐 Admin Winmex</h1>
+
           <p style={{ color: "#475569" }}>
             Ingresa la clave para ver el panel administrativo.
           </p>
@@ -607,6 +656,7 @@ export default function AdminPage() {
               color: "#000",
               background: "#fff",
               marginBottom: 14,
+              boxSizing: "border-box",
             }}
           />
 
@@ -642,8 +692,6 @@ export default function AdminPage() {
       style={{
         padding: 20,
         fontFamily: "Arial, sans-serif",
-        minHeight: "100vh",
-        color: "#000000",
         backgroundImage: `
           linear-gradient(
             rgba(15,23,42,0.78),
@@ -655,6 +703,8 @@ export default function AdminPage() {
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         backgroundAttachment: "fixed",
+        minHeight: "100vh",
+        color: "#000000",
       }}
     >
       <div
@@ -679,6 +729,7 @@ export default function AdminPage() {
           >
             🏍️ WINMEX CONTROL DE ASISTENCIAS
           </h1>
+
           <p
             style={{
               color: "#ffffff",
@@ -727,9 +778,16 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {mensaje && <p style={{ color: "#ffffff", fontWeight: "bold" }}>{mensaje}</p>}
+      {mensaje && <p style={{ color: "#ffffff" }}>{mensaje}</p>}
 
-      <nav style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 25 }}>
+      <nav
+        style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          marginBottom: 25,
+        }}
+      >
         {[
           ["dashboard", "📊 Dashboard"],
           ["personal", "👷 Personal"],
@@ -777,31 +835,33 @@ export default function AdminPage() {
 
           <section style={sectionStyle}>
             <h2>📅 Reporte semanal</h2>
-            <p>Semana desde: <b>{inicioSemana.toLocaleDateString("es-MX")}</b></p>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    {["Empleado", "Sucursal", "Entradas", "Salidas", "Retardos", "Salidas anticipadas", "Fuera de zona"].map((h) => (
-                      <th key={h} style={thStyle}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumenSemanal.map((r) => (
-                    <tr key={r.empleado}>
-                      <td style={tdStyle}>{r.empleado}</td>
-                      <td style={tdStyle}>{r.sucursal}</td>
-                      <td style={tdStyle}>{r.entradas}</td>
-                      <td style={tdStyle}>{r.salidas}</td>
-                      <td style={tdStyle}>{r.retardos}</td>
-                      <td style={tdStyle}>{r.salidasAnticipadas}</td>
-                      <td style={tdStyle}>{r.fueraZona}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p>
+              Semana desde: <b>{inicioSemana.toLocaleDateString("es-MX")}</b>
+            </p>
+
+            <Tabla
+              headers={[
+                "Empleado",
+                "Sucursal",
+                "Entradas",
+                "Salidas",
+                "Retardos",
+                "Salidas anticipadas",
+                "Fuera de zona",
+              ]}
+            >
+              {resumenSemanal.map((r) => (
+                <tr key={r.empleado}>
+                  <td style={tdStyle}>{r.empleado}</td>
+                  <td style={tdStyle}>{r.sucursal}</td>
+                  <td style={tdStyle}>{r.entradas}</td>
+                  <td style={tdStyle}>{r.salidas}</td>
+                  <td style={tdStyle}>{r.retardos}</td>
+                  <td style={tdStyle}>{r.salidasAnticipadas}</td>
+                  <td style={tdStyle}>{r.fueraZona}</td>
+                </tr>
+              ))}
+            </Tabla>
           </section>
         </>
       )}
@@ -809,180 +869,518 @@ export default function AdminPage() {
       {seccionActiva === "personal" && (
         <section style={sectionStyle}>
           <h2>👷 Estado actual del personal</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 15, marginBottom: 20 }}>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 15,
+              marginBottom: 20,
+            }}
+          >
             {tarjeta("🟢 TRABAJANDO", trabajandoAhora, "Empleados activos", "#00C853")}
             {tarjeta("⚫ NO HAN LLEGADO", noHanLlegado, "Sin entrada hoy", "#334155")}
             {tarjeta("🔵 YA SALIERON", yaSalieron, "Con salida registrada", "#2962FF")}
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {["Empleado", "Sucursal", "Entrada", "Salida", "Horas hoy", "Estatus", "Incidencias"].map((h) => <th key={h} style={thStyle}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {resumenHoy.map((r) => (
-                  <tr key={r.empleado}>
-                    <td style={tdStyle}>{r.empleado}</td>
-                    <td style={tdStyle}>{r.sucursal}</td>
-                    <td style={tdStyle}>{r.entrada}</td>
-                    <td style={tdStyle}>{r.salida}</td>
-                    <td style={tdStyle}>{r.horas}</td>
-                    <td style={tdStyle}>{r.estatus}</td>
-                    <td style={tdStyle}>
-                      {r.tieneRetardo ? "Retardo " : ""}
-                      {r.salidaAnticipada ? "Salida anticipada " : ""}
-                      {r.fueraZona ? "Fuera de zona" : ""}
-                      {!r.tieneRetardo && !r.salidaAnticipada && !r.fueraZona ? "-" : ""}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          <Tabla
+            headers={[
+              "Empleado",
+              "Sucursal",
+              "Entrada",
+              "Salida",
+              "Horas hoy",
+              "Estatus",
+              "Incidencias",
+            ]}
+          >
+            {resumenHoy.map((r) => (
+              <tr key={r.empleado}>
+                <td style={tdStyle}>{r.empleado}</td>
+                <td style={tdStyle}>{r.sucursal}</td>
+                <td style={tdStyle}>{r.entrada}</td>
+                <td style={tdStyle}>{r.salida}</td>
+                <td style={tdStyle}>{r.horas}</td>
+                <td style={tdStyle}>{r.estatus}</td>
+                <td style={tdStyle}>
+                  {r.tieneRetardo ? "Retardo " : ""}
+                  {r.salidaAnticipada ? "Salida anticipada " : ""}
+                  {r.fueraZona ? "Fuera de zona" : ""}
+                  {!r.tieneRetardo && !r.salidaAnticipada && !r.fueraZona ? "-" : ""}
+                </td>
+              </tr>
+            ))}
+          </Tabla>
         </section>
       )}
 
       {seccionActiva === "nomina" && (
         <section style={sectionStyle}>
           <h2>💰 Reporte de nómina semanal</h2>
-          <button onClick={descargarExcelNomina} style={{ padding: "10px 15px", marginBottom: 15, borderRadius: 8, border: "none", background: "#00C853", color: "#ffffff", fontWeight: "bold", cursor: "pointer" }}>
+
+          <button
+            onClick={descargarExcelNomina}
+            style={{
+              padding: "10px 15px",
+              marginBottom: 15,
+              borderRadius: 8,
+              border: "none",
+              background: "#00C853",
+              color: "#ffffff",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
             📥 Descargar Excel
           </button>
-          <p>Semana desde: <b>{inicioSemana.toLocaleDateString("es-MX")}</b></p>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {["Empleado", "Sucursal", "Horas trabajadas", "Retardos", "Salidas anticipadas", "Fuera de zona"].map((h) => <th key={h} style={thStyle}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {reporteNomina.map((r) => (
-                  <tr key={r.empleado}>
-                    <td style={tdStyle}>{r.empleado}</td>
-                    <td style={tdStyle}>{r.sucursal}</td>
-                    <td style={tdStyle}>{r.horasTrabajadas}</td>
-                    <td style={tdStyle}>{r.retardos}</td>
-                    <td style={tdStyle}>{r.salidasAnticipadas}</td>
-                    <td style={tdStyle}>{r.fueraZona}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          <p>
+            Semana desde: <b>{inicioSemana.toLocaleDateString("es-MX")}</b>
+          </p>
+
+          <Tabla
+            headers={[
+              "Empleado",
+              "Sucursal",
+              "Horas trabajadas",
+              "Retardos",
+              "Salidas anticipadas",
+              "Fuera de zona",
+            ]}
+          >
+            {reporteNomina.map((r) => (
+              <tr key={r.empleado}>
+                <td style={tdStyle}>{r.empleado}</td>
+                <td style={tdStyle}>{r.sucursal}</td>
+                <td style={tdStyle}>{r.horasTrabajadas}</td>
+                <td style={tdStyle}>{r.retardos}</td>
+                <td style={tdStyle}>{r.salidasAnticipadas}</td>
+                <td style={tdStyle}>{r.fueraZona}</td>
+              </tr>
+            ))}
+          </Tabla>
         </section>
       )}
 
       {seccionActiva === "empleados" && (
         <section style={sectionStyle}>
           <h2>👤 Administración de empleados</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 15 }}>
-            <input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="Nombre del empleado" style={{ padding: 12, color: "#000", background: "#fff" }} />
-            <input value={nuevoTelefono} onChange={(e) => setNuevoTelefono(e.target.value)} placeholder="Teléfono opcional" style={{ padding: 12, color: "#000", background: "#fff" }} />
-            <select value={nuevaSucursalId} onChange={(e) => setNuevaSucursalId(e.target.value)} style={{ padding: 12, color: "#000", background: "#fff" }}>
-              <option value="">Selecciona sucursal</option>
-              {sucursalesActivas.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 10,
+              marginBottom: 15,
+            }}
+          >
+            <input
+              value={nuevoNombre}
+              onChange={(e) => setNuevoNombre(e.target.value)}
+              placeholder="Nombre"
+              style={inputStyle}
+            />
+
+            <input
+              value={nuevoTelefono}
+              onChange={(e) => setNuevoTelefono(e.target.value)}
+              placeholder="Teléfono"
+              style={inputStyle}
+            />
+
+            <input
+              value={nuevoPin}
+              onChange={(e) => setNuevoPin(e.target.value)}
+              placeholder="PIN visible"
+              maxLength={6}
+              style={inputStyle}
+            />
+
+            <select
+              value={nuevoRol}
+              onChange={(e) => setNuevoRol(e.target.value)}
+              style={inputStyle}
+            >
+              <option value="empleado">empleado</option>
+              <option value="supervisor">supervisor</option>
+              <option value="admin">admin</option>
             </select>
-            <button onClick={agregarEmpleado} style={{ padding: 12, background: "#00C853", color: "#fff", border: "none", fontWeight: "bold" }}>Agregar empleado</button>
+
+            <select
+              value={nuevaSucursalId}
+              onChange={(e) => setNuevaSucursalId(e.target.value)}
+              style={inputStyle}
+            >
+              <option value="">Sucursal</option>
+              {sucursalesActivas.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={agregarEmpleado}
+              style={{
+                padding: 12,
+                background: "#00C853",
+                color: "#fff",
+                border: "none",
+                fontWeight: "bold",
+                borderRadius: 8,
+                cursor: "pointer",
+              }}
+            >
+              Agregar empleado
+            </button>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>{["Empleado", "Teléfono", "Sucursal", "Rol", "Estado", "Acción"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {empleados.map((e) => (
-                  <tr key={e.id}>
-                    <td style={tdStyle}>{e.nombre}</td>
-                    <td style={tdStyle}>{e.telefono || "-"}</td>
-                    <td style={tdStyle}>
-                      <select value={e.sucursal_id || ""} onChange={(ev) => cambiarSucursal(e.id, ev.target.value)} style={{ padding: 8, width: "100%", color: "#000", background: "#fff" }}>
-                        <option value="">Sin sucursal</option>
-                        {sucursalesActivas.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                      </select>
-                    </td>
-                    <td style={tdStyle}>{e.rol || "empleado"}</td>
-                    <td style={tdStyle}>{e.activo ? "Activo" : "Inactivo"}</td>
-                    <td style={tdStyle}>
-                      <button onClick={() => cambiarActivo(e)} style={{ padding: 8, background: e.activo ? "#D50000" : "#00C853", color: "#fff", border: "none" }}>
-                        {e.activo ? "Desactivar" : "Activar"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          <Tabla
+            headers={[
+              "Nombre",
+              "Teléfono",
+              "PIN",
+              "Rol",
+              "Sucursal",
+              "Activo",
+              "Guardar",
+            ]}
+          >
+            {empleados.map((e) => (
+              <tr key={e.id}>
+                <td style={tdStyle}>
+                  <input
+                    value={e.nombre}
+                    onChange={(ev) =>
+                      editarEmpleadoLocal(e.id, "nombre", ev.target.value)
+                    }
+                    style={inputTableStyle}
+                  />
+                </td>
+
+                <td style={tdStyle}>
+                  <input
+                    value={e.telefono || ""}
+                    onChange={(ev) =>
+                      editarEmpleadoLocal(e.id, "telefono", ev.target.value)
+                    }
+                    style={inputTableStyle}
+                  />
+                </td>
+
+                <td style={tdStyle}>
+                  <input
+                    value={e.pin || ""}
+                    onChange={(ev) =>
+                      editarEmpleadoLocal(e.id, "pin", ev.target.value)
+                    }
+                    style={inputTableStyle}
+                  />
+                </td>
+
+                <td style={tdStyle}>
+                  <select
+                    value={e.rol || "empleado"}
+                    onChange={(ev) =>
+                      editarEmpleadoLocal(e.id, "rol", ev.target.value)
+                    }
+                    style={inputTableStyle}
+                  >
+                    <option value="empleado">empleado</option>
+                    <option value="supervisor">supervisor</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </td>
+
+                <td style={tdStyle}>
+                  <select
+                    value={e.sucursal_id || ""}
+                    onChange={(ev) =>
+                      editarEmpleadoLocal(e.id, "sucursal_id", ev.target.value)
+                    }
+                    style={inputTableStyle}
+                  >
+                    <option value="">Sin sucursal</option>
+                    {sucursalesActivas.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+
+                <td style={tdStyle}>
+                  <select
+                    value={e.activo ? "true" : "false"}
+                    onChange={(ev) =>
+                      editarEmpleadoLocal(
+                        e.id,
+                        "activo",
+                        ev.target.value === "true"
+                      )
+                    }
+                    style={inputTableStyle}
+                  >
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                  </select>
+                </td>
+
+                <td style={tdStyle}>
+                  <button
+                    onClick={() => guardarEmpleado(e)}
+                    style={{
+                      padding: 8,
+                      background: "#2962FF",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 8,
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Guardar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Tabla>
         </section>
       )}
 
       {seccionActiva === "sucursales" && (
         <section style={sectionStyle}>
           <h2>🏢 Administración de sucursales</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 15 }}>
-            <input value={sucursalNombre} onChange={(e) => setSucursalNombre(e.target.value)} placeholder="Nombre sucursal" style={{ padding: 12, color: "#000", background: "#fff" }} />
-            <input value={sucursalLatitud} onChange={(e) => setSucursalLatitud(e.target.value)} placeholder="Latitud" style={{ padding: 12, color: "#000", background: "#fff" }} />
-            <input value={sucursalLongitud} onChange={(e) => setSucursalLongitud(e.target.value)} placeholder="Longitud" style={{ padding: 12, color: "#000", background: "#fff" }} />
-            <input value={sucursalRadio} onChange={(e) => setSucursalRadio(e.target.value)} placeholder="Radio metros" style={{ padding: 12, color: "#000", background: "#fff" }} />
-            <button onClick={agregarSucursal} style={{ padding: 12, background: "#2962FF", color: "#fff", border: "none", fontWeight: "bold" }}>Agregar sucursal</button>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 10,
+              marginBottom: 15,
+            }}
+          >
+            <input
+              value={sucursalNombre}
+              onChange={(e) => setSucursalNombre(e.target.value)}
+              placeholder="Nombre sucursal"
+              style={inputStyle}
+            />
+            <input
+              value={sucursalLatitud}
+              onChange={(e) => setSucursalLatitud(e.target.value)}
+              placeholder="Latitud"
+              style={inputStyle}
+            />
+            <input
+              value={sucursalLongitud}
+              onChange={(e) => setSucursalLongitud(e.target.value)}
+              placeholder="Longitud"
+              style={inputStyle}
+            />
+            <input
+              value={sucursalRadio}
+              onChange={(e) => setSucursalRadio(e.target.value)}
+              placeholder="Radio metros"
+              style={inputStyle}
+            />
+
+            <button
+              onClick={agregarSucursal}
+              style={{
+                padding: 12,
+                background: "#2962FF",
+                color: "#fff",
+                border: "none",
+                fontWeight: "bold",
+                borderRadius: 8,
+                cursor: "pointer",
+              }}
+            >
+              Agregar sucursal
+            </button>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>{["Sucursal", "Latitud", "Longitud", "Radio", "Estado", "Acción"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {sucursales.map((s) => (
-                  <tr key={s.id}>
-                    <td style={tdStyle}>{s.nombre}</td>
-                    <td style={tdStyle}>{s.latitud}</td>
-                    <td style={tdStyle}>{s.longitud}</td>
-                    <td style={tdStyle}>
-                      <input defaultValue={s.radio_metros} onBlur={(e) => actualizarRadioSucursal(s.id, e.target.value)} style={{ padding: 8, width: 90, color: "#000", background: "#fff" }} /> m
-                    </td>
-                    <td style={tdStyle}>{s.activa ? "Activa" : "Inactiva"}</td>
-                    <td style={tdStyle}>
-                      <button onClick={() => cambiarSucursalActiva(s)} style={{ padding: 8, background: s.activa ? "#D50000" : "#00C853", color: "#fff", border: "none" }}>
-                        {s.activa ? "Desactivar" : "Activar"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          <Tabla
+            headers={[
+              "Sucursal",
+              "Latitud",
+              "Longitud",
+              "Radio",
+              "Estado",
+              "Acción",
+            ]}
+          >
+            {sucursales.map((s) => (
+              <tr key={s.id}>
+                <td style={tdStyle}>{s.nombre}</td>
+                <td style={tdStyle}>{s.latitud}</td>
+                <td style={tdStyle}>{s.longitud}</td>
+                <td style={tdStyle}>
+                  <input
+                    defaultValue={s.radio_metros}
+                    onBlur={(e) =>
+                      actualizarRadioSucursal(s.id, e.target.value)
+                    }
+                    style={{
+                      padding: 8,
+                      width: 90,
+                      color: "#000",
+                      background: "#fff",
+                    }}
+                  />{" "}
+                  m
+                </td>
+                <td style={tdStyle}>{s.activa ? "Activa" : "Inactiva"}</td>
+                <td style={tdStyle}>
+                  <button
+                    onClick={() => cambiarSucursalActiva(s)}
+                    style={{
+                      padding: 8,
+                      background: s.activa ? "#D50000" : "#00C853",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {s.activa ? "Desactivar" : "Activar"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Tabla>
         </section>
       )}
 
       {seccionActiva === "registros" && (
         <section style={sectionStyle}>
           <h2>📍 Registros recientes</h2>
-          <div style={{ overflowX: "auto", background: "#ffffff", borderRadius: 12 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>{["Fecha", "Empleado", "Sucursal", "Tipo", "Estado", "Puntualidad", "Distancia", "Selfie", "Mapa"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {asistencias.slice(0, 100).map((a) => (
-                  <tr key={a.id}>
-                    <td style={tdStyle}>{new Date(a.created_at).toLocaleString("es-MX")}</td>
-                    <td style={tdStyle}>{a.empleados_asistencia?.nombre || "Sin empleado"}</td>
-                    <td style={tdStyle}>{a.sucursales_asistencia?.nombre || "Sin sucursal"}</td>
-                    <td style={tdStyle}>{a.tipo}</td>
-                    <td style={tdStyle}>{a.estado || "-"}</td>
-                    <td style={tdStyle}>{a.puntualidad || "-"}</td>
-                    <td style={tdStyle}>{a.distancia_metros !== null ? `${Math.round(a.distancia_metros)} m` : "-"}</td>
-                    <td style={tdStyle}>{a.foto_url ? <a href={a.foto_url} target="_blank" style={{ color: "#2563eb", fontWeight: "bold" }}>Ver selfie</a> : "-"}</td>
-                    <td style={tdStyle}>{a.latitud && a.longitud ? <a href={`https://maps.google.com/?q=${a.latitud},${a.longitud}`} target="_blank" style={{ color: "#2563eb", fontWeight: "bold" }}>Ver mapa</a> : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          <Tabla
+            headers={[
+              "Fecha",
+              "Empleado",
+              "Sucursal",
+              "Tipo",
+              "Estado",
+              "Puntualidad",
+              "Distancia",
+              "Selfie",
+              "Mapa",
+            ]}
+          >
+            {asistencias.slice(0, 100).map((a) => (
+              <tr key={a.id}>
+                <td style={tdStyle}>
+                  {new Date(a.created_at).toLocaleString("es-MX")}
+                </td>
+                <td style={tdStyle}>
+                  {a.empleados_asistencia?.nombre || "Sin empleado"}
+                </td>
+                <td style={tdStyle}>
+                  {a.sucursales_asistencia?.nombre || "Sin sucursal"}
+                </td>
+                <td style={tdStyle}>{a.tipo}</td>
+                <td style={tdStyle}>{a.estado || "-"}</td>
+                <td style={tdStyle}>{a.puntualidad || "-"}</td>
+                <td style={tdStyle}>
+                  {a.distancia_metros !== null
+                    ? `${Math.round(a.distancia_metros)} m`
+                    : "-"}
+                </td>
+                <td style={tdStyle}>
+                  {a.foto_url ? (
+                    <a
+                      href={a.foto_url}
+                      target="_blank"
+                      style={{ color: "#2563eb", fontWeight: "bold" }}
+                    >
+                      Ver selfie
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td style={tdStyle}>
+                  {a.latitud && a.longitud ? (
+                    <a
+                      href={`https://maps.google.com/?q=${a.latitud},${a.longitud}`}
+                      target="_blank"
+                      style={{ color: "#2563eb", fontWeight: "bold" }}
+                    >
+                      Ver mapa
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Tabla>
         </section>
       )}
     </main>
+  );
+}
+
+const sectionStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 16,
+  padding: 20,
+  marginBottom: 30,
+  background: "rgba(255,255,255,0.95)",
+  backdropFilter: "blur(8px)",
+  color: "#000000",
+};
+
+const inputStyle = {
+  padding: 12,
+  color: "#000000",
+  background: "#ffffff",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+};
+
+const inputTableStyle = {
+  padding: 8,
+  width: "100%",
+  color: "#000000",
+  background: "#ffffff",
+  border: "1px solid #cbd5e1",
+  borderRadius: 6,
+  boxSizing: "border-box" as const,
+};
+
+function Tabla({
+  headers,
+  children,
+}: {
+  headers: string[];
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          background: "#ffffff",
+          color: "#000000",
+        }}
+      >
+        <thead>
+          <tr>
+            {headers.map((h) => (
+              <th key={h} style={thStyle}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>{children}</tbody>
+      </table>
+    </div>
   );
 }
