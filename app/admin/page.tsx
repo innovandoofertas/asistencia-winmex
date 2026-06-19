@@ -55,6 +55,66 @@ const tdStyle = {
   color: "#000000",
 };
 
+const sectionStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 16,
+  padding: 20,
+  marginBottom: 30,
+  background: "rgba(255,255,255,0.95)",
+  backdropFilter: "blur(8px)",
+  color: "#000000",
+};
+
+const inputStyle = {
+  padding: 12,
+  color: "#000000",
+  background: "#ffffff",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+};
+
+const inputTableStyle = {
+  padding: 8,
+  width: "100%",
+  color: "#000000",
+  background: "#ffffff",
+  border: "1px solid #cbd5e1",
+  borderRadius: 6,
+  boxSizing: "border-box" as const,
+};
+
+function Tabla({
+  headers,
+  children,
+}: {
+  headers: string[];
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          background: "#ffffff",
+          color: "#000000",
+        }}
+      >
+        <thead>
+          <tr>
+            {headers.map((h) => (
+              <th key={h} style={thStyle}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
@@ -453,6 +513,12 @@ export default function AdminPage() {
   inicioSemana.setDate(inicioSemana.getDate() + diferenciaLunes);
   inicioSemana.setHours(0, 0, 0, 0);
 
+  const diasLaboralesSemana = Array.from({ length: 6 }).map((_, index) => {
+    const dia = new Date(inicioSemana);
+    dia.setDate(inicioSemana.getDate() + index);
+    return dia;
+  });
+
   const asistenciasSemana = asistencias.filter(
     (a) => new Date(a.created_at) >= inicioSemana
   );
@@ -475,11 +541,25 @@ export default function AdminPage() {
 
     const fueraZona = registros.filter((r) => r.estado === "fuera_de_zona");
 
+    const faltas = diasLaboralesSemana.filter((dia) => {
+      if (dia > new Date()) return false;
+
+      const fechaDia = dia.toLocaleDateString("es-MX");
+
+      const tuvoEntrada = entradas.some(
+        (entrada) =>
+          new Date(entrada.created_at).toLocaleDateString("es-MX") === fechaDia
+      );
+
+      return !tuvoEntrada;
+    }).length;
+
     return {
       empleado: empleado.nombre,
       sucursal: empleado.sucursales_asistencia?.nombre || "Sin sucursal",
       entradas: entradas.length,
       salidas: salidas.length,
+      faltas,
       retardos: retardos.length,
       salidasAnticipadas: salidasAnticipadas.length,
       fueraZona: fueraZona.length,
@@ -526,10 +606,24 @@ export default function AdminPage() {
     const fueraZona = registros.filter((r) => r.estado === "fuera_de_zona")
       .length;
 
+    const faltas = diasLaboralesSemana.filter((dia) => {
+      if (dia > new Date()) return false;
+
+      const fechaDia = dia.toLocaleDateString("es-MX");
+
+      const tuvoEntrada = entradas.some(
+        (entrada) =>
+          new Date(entrada.created_at).toLocaleDateString("es-MX") === fechaDia
+      );
+
+      return !tuvoEntrada;
+    }).length;
+
     return {
       empleado: empleado.nombre,
       sucursal: empleado.sucursales_asistencia?.nombre || "Sin sucursal",
       horasTrabajadas: formatoHorasMinutos(minutosSemana),
+      faltas,
       retardos,
       salidasAnticipadas,
       fueraZona,
@@ -541,6 +635,7 @@ export default function AdminPage() {
       "Empleado",
       "Sucursal",
       "Horas trabajadas",
+      "Faltas",
       "Retardos",
       "Salidas anticipadas",
       "Fuera de zona",
@@ -550,6 +645,7 @@ export default function AdminPage() {
       r.empleado,
       r.sucursal,
       r.horasTrabajadas,
+      r.faltas,
       r.retardos,
       r.salidasAnticipadas,
       r.fueraZona,
@@ -845,6 +941,7 @@ export default function AdminPage() {
                 "Sucursal",
                 "Entradas",
                 "Salidas",
+                "Faltas",
                 "Retardos",
                 "Salidas anticipadas",
                 "Fuera de zona",
@@ -856,6 +953,7 @@ export default function AdminPage() {
                   <td style={tdStyle}>{r.sucursal}</td>
                   <td style={tdStyle}>{r.entradas}</td>
                   <td style={tdStyle}>{r.salidas}</td>
+                  <td style={tdStyle}>{r.faltas}</td>
                   <td style={tdStyle}>{r.retardos}</td>
                   <td style={tdStyle}>{r.salidasAnticipadas}</td>
                   <td style={tdStyle}>{r.fueraZona}</td>
@@ -943,6 +1041,7 @@ export default function AdminPage() {
               "Empleado",
               "Sucursal",
               "Horas trabajadas",
+              "Faltas",
               "Retardos",
               "Salidas anticipadas",
               "Fuera de zona",
@@ -953,6 +1052,7 @@ export default function AdminPage() {
                 <td style={tdStyle}>{r.empleado}</td>
                 <td style={tdStyle}>{r.sucursal}</td>
                 <td style={tdStyle}>{r.horasTrabajadas}</td>
+                <td style={tdStyle}>{r.faltas}</td>
                 <td style={tdStyle}>{r.retardos}</td>
                 <td style={tdStyle}>{r.salidasAnticipadas}</td>
                 <td style={tdStyle}>{r.fueraZona}</td>
@@ -974,43 +1074,17 @@ export default function AdminPage() {
               marginBottom: 15,
             }}
           >
-            <input
-              value={nuevoNombre}
-              onChange={(e) => setNuevoNombre(e.target.value)}
-              placeholder="Nombre"
-              style={inputStyle}
-            />
+            <input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="Nombre" style={inputStyle} />
+            <input value={nuevoTelefono} onChange={(e) => setNuevoTelefono(e.target.value)} placeholder="Teléfono" style={inputStyle} />
+            <input value={nuevoPin} onChange={(e) => setNuevoPin(e.target.value)} placeholder="PIN visible" maxLength={6} style={inputStyle} />
 
-            <input
-              value={nuevoTelefono}
-              onChange={(e) => setNuevoTelefono(e.target.value)}
-              placeholder="Teléfono"
-              style={inputStyle}
-            />
-
-            <input
-              value={nuevoPin}
-              onChange={(e) => setNuevoPin(e.target.value)}
-              placeholder="PIN visible"
-              maxLength={6}
-              style={inputStyle}
-            />
-
-            <select
-              value={nuevoRol}
-              onChange={(e) => setNuevoRol(e.target.value)}
-              style={inputStyle}
-            >
+            <select value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value)} style={inputStyle}>
               <option value="empleado">empleado</option>
               <option value="supervisor">supervisor</option>
               <option value="admin">admin</option>
             </select>
 
-            <select
-              value={nuevaSucursalId}
-              onChange={(e) => setNuevaSucursalId(e.target.value)}
-              style={inputStyle}
-            >
+            <select value={nuevaSucursalId} onChange={(e) => setNuevaSucursalId(e.target.value)} style={inputStyle}>
               <option value="">Sucursal</option>
               {sucursalesActivas.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -1035,71 +1109,27 @@ export default function AdminPage() {
             </button>
           </div>
 
-          <Tabla
-            headers={[
-              "Nombre",
-              "Teléfono",
-              "PIN",
-              "Rol",
-              "Sucursal",
-              "Activo",
-              "Guardar",
-            ]}
-          >
+          <Tabla headers={["Nombre", "Teléfono", "PIN", "Rol", "Sucursal", "Activo", "Guardar"]}>
             {empleados.map((e) => (
               <tr key={e.id}>
                 <td style={tdStyle}>
-                  <input
-                    value={e.nombre}
-                    onChange={(ev) =>
-                      editarEmpleadoLocal(e.id, "nombre", ev.target.value)
-                    }
-                    style={inputTableStyle}
-                  />
+                  <input value={e.nombre} onChange={(ev) => editarEmpleadoLocal(e.id, "nombre", ev.target.value)} style={inputTableStyle} />
                 </td>
-
                 <td style={tdStyle}>
-                  <input
-                    value={e.telefono || ""}
-                    onChange={(ev) =>
-                      editarEmpleadoLocal(e.id, "telefono", ev.target.value)
-                    }
-                    style={inputTableStyle}
-                  />
+                  <input value={e.telefono || ""} onChange={(ev) => editarEmpleadoLocal(e.id, "telefono", ev.target.value)} style={inputTableStyle} />
                 </td>
-
                 <td style={tdStyle}>
-                  <input
-                    value={e.pin || ""}
-                    onChange={(ev) =>
-                      editarEmpleadoLocal(e.id, "pin", ev.target.value)
-                    }
-                    style={inputTableStyle}
-                  />
+                  <input value={e.pin || ""} onChange={(ev) => editarEmpleadoLocal(e.id, "pin", ev.target.value)} style={inputTableStyle} />
                 </td>
-
                 <td style={tdStyle}>
-                  <select
-                    value={e.rol || "empleado"}
-                    onChange={(ev) =>
-                      editarEmpleadoLocal(e.id, "rol", ev.target.value)
-                    }
-                    style={inputTableStyle}
-                  >
+                  <select value={e.rol || "empleado"} onChange={(ev) => editarEmpleadoLocal(e.id, "rol", ev.target.value)} style={inputTableStyle}>
                     <option value="empleado">empleado</option>
                     <option value="supervisor">supervisor</option>
                     <option value="admin">admin</option>
                   </select>
                 </td>
-
                 <td style={tdStyle}>
-                  <select
-                    value={e.sucursal_id || ""}
-                    onChange={(ev) =>
-                      editarEmpleadoLocal(e.id, "sucursal_id", ev.target.value)
-                    }
-                    style={inputTableStyle}
-                  >
+                  <select value={e.sucursal_id || ""} onChange={(ev) => editarEmpleadoLocal(e.id, "sucursal_id", ev.target.value)} style={inputTableStyle}>
                     <option value="">Sin sucursal</option>
                     {sucursalesActivas.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -1108,37 +1138,14 @@ export default function AdminPage() {
                     ))}
                   </select>
                 </td>
-
                 <td style={tdStyle}>
-                  <select
-                    value={e.activo ? "true" : "false"}
-                    onChange={(ev) =>
-                      editarEmpleadoLocal(
-                        e.id,
-                        "activo",
-                        ev.target.value === "true"
-                      )
-                    }
-                    style={inputTableStyle}
-                  >
+                  <select value={e.activo ? "true" : "false"} onChange={(ev) => editarEmpleadoLocal(e.id, "activo", ev.target.value === "true")} style={inputTableStyle}>
                     <option value="true">Activo</option>
                     <option value="false">Inactivo</option>
                   </select>
                 </td>
-
                 <td style={tdStyle}>
-                  <button
-                    onClick={() => guardarEmpleado(e)}
-                    style={{
-                      padding: 8,
-                      background: "#2962FF",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 8,
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                    }}
-                  >
+                  <button onClick={() => guardarEmpleado(e)} style={{ padding: 8, background: "#2962FF", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer" }}>
                     Guardar
                   </button>
                 </td>
@@ -1152,98 +1159,29 @@ export default function AdminPage() {
         <section style={sectionStyle}>
           <h2>🏢 Administración de sucursales</h2>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 10,
-              marginBottom: 15,
-            }}
-          >
-            <input
-              value={sucursalNombre}
-              onChange={(e) => setSucursalNombre(e.target.value)}
-              placeholder="Nombre sucursal"
-              style={inputStyle}
-            />
-            <input
-              value={sucursalLatitud}
-              onChange={(e) => setSucursalLatitud(e.target.value)}
-              placeholder="Latitud"
-              style={inputStyle}
-            />
-            <input
-              value={sucursalLongitud}
-              onChange={(e) => setSucursalLongitud(e.target.value)}
-              placeholder="Longitud"
-              style={inputStyle}
-            />
-            <input
-              value={sucursalRadio}
-              onChange={(e) => setSucursalRadio(e.target.value)}
-              placeholder="Radio metros"
-              style={inputStyle}
-            />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 15 }}>
+            <input value={sucursalNombre} onChange={(e) => setSucursalNombre(e.target.value)} placeholder="Nombre sucursal" style={inputStyle} />
+            <input value={sucursalLatitud} onChange={(e) => setSucursalLatitud(e.target.value)} placeholder="Latitud" style={inputStyle} />
+            <input value={sucursalLongitud} onChange={(e) => setSucursalLongitud(e.target.value)} placeholder="Longitud" style={inputStyle} />
+            <input value={sucursalRadio} onChange={(e) => setSucursalRadio(e.target.value)} placeholder="Radio metros" style={inputStyle} />
 
-            <button
-              onClick={agregarSucursal}
-              style={{
-                padding: 12,
-                background: "#2962FF",
-                color: "#fff",
-                border: "none",
-                fontWeight: "bold",
-                borderRadius: 8,
-                cursor: "pointer",
-              }}
-            >
+            <button onClick={agregarSucursal} style={{ padding: 12, background: "#2962FF", color: "#fff", border: "none", fontWeight: "bold", borderRadius: 8, cursor: "pointer" }}>
               Agregar sucursal
             </button>
           </div>
 
-          <Tabla
-            headers={[
-              "Sucursal",
-              "Latitud",
-              "Longitud",
-              "Radio",
-              "Estado",
-              "Acción",
-            ]}
-          >
+          <Tabla headers={["Sucursal", "Latitud", "Longitud", "Radio", "Estado", "Acción"]}>
             {sucursales.map((s) => (
               <tr key={s.id}>
                 <td style={tdStyle}>{s.nombre}</td>
                 <td style={tdStyle}>{s.latitud}</td>
                 <td style={tdStyle}>{s.longitud}</td>
                 <td style={tdStyle}>
-                  <input
-                    defaultValue={s.radio_metros}
-                    onBlur={(e) =>
-                      actualizarRadioSucursal(s.id, e.target.value)
-                    }
-                    style={{
-                      padding: 8,
-                      width: 90,
-                      color: "#000",
-                      background: "#fff",
-                    }}
-                  />{" "}
-                  m
+                  <input defaultValue={s.radio_metros} onBlur={(e) => actualizarRadioSucursal(s.id, e.target.value)} style={{ padding: 8, width: 90, color: "#000", background: "#fff" }} /> m
                 </td>
                 <td style={tdStyle}>{s.activa ? "Activa" : "Inactiva"}</td>
                 <td style={tdStyle}>
-                  <button
-                    onClick={() => cambiarSucursalActiva(s)}
-                    style={{
-                      padding: 8,
-                      background: s.activa ? "#D50000" : "#00C853",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                    }}
-                  >
+                  <button onClick={() => cambiarSucursalActiva(s)} style={{ padding: 8, background: s.activa ? "#D50000" : "#00C853", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
                     {s.activa ? "Desactivar" : "Activar"}
                   </button>
                 </td>
@@ -1257,45 +1195,19 @@ export default function AdminPage() {
         <section style={sectionStyle}>
           <h2>📍 Registros recientes</h2>
 
-          <Tabla
-            headers={[
-              "Fecha",
-              "Empleado",
-              "Sucursal",
-              "Tipo",
-              "Estado",
-              "Puntualidad",
-              "Distancia",
-              "Selfie",
-              "Mapa",
-            ]}
-          >
+          <Tabla headers={["Fecha", "Empleado", "Sucursal", "Tipo", "Estado", "Puntualidad", "Distancia", "Selfie", "Mapa"]}>
             {asistencias.slice(0, 100).map((a) => (
               <tr key={a.id}>
-                <td style={tdStyle}>
-                  {new Date(a.created_at).toLocaleString("es-MX")}
-                </td>
-                <td style={tdStyle}>
-                  {a.empleados_asistencia?.nombre || "Sin empleado"}
-                </td>
-                <td style={tdStyle}>
-                  {a.sucursales_asistencia?.nombre || "Sin sucursal"}
-                </td>
+                <td style={tdStyle}>{new Date(a.created_at).toLocaleString("es-MX")}</td>
+                <td style={tdStyle}>{a.empleados_asistencia?.nombre || "Sin empleado"}</td>
+                <td style={tdStyle}>{a.sucursales_asistencia?.nombre || "Sin sucursal"}</td>
                 <td style={tdStyle}>{a.tipo}</td>
                 <td style={tdStyle}>{a.estado || "-"}</td>
                 <td style={tdStyle}>{a.puntualidad || "-"}</td>
-                <td style={tdStyle}>
-                  {a.distancia_metros !== null
-                    ? `${Math.round(a.distancia_metros)} m`
-                    : "-"}
-                </td>
+                <td style={tdStyle}>{a.distancia_metros !== null ? `${Math.round(a.distancia_metros)} m` : "-"}</td>
                 <td style={tdStyle}>
                   {a.foto_url ? (
-                    <a
-                      href={a.foto_url}
-                      target="_blank"
-                      style={{ color: "#2563eb", fontWeight: "bold" }}
-                    >
+                    <a href={a.foto_url} target="_blank" style={{ color: "#2563eb", fontWeight: "bold" }}>
                       Ver selfie
                     </a>
                   ) : (
@@ -1304,11 +1216,7 @@ export default function AdminPage() {
                 </td>
                 <td style={tdStyle}>
                   {a.latitud && a.longitud ? (
-                    <a
-                      href={`https://maps.google.com/?q=${a.latitud},${a.longitud}`}
-                      target="_blank"
-                      style={{ color: "#2563eb", fontWeight: "bold" }}
-                    >
+                    <a href={`https://maps.google.com/?q=${a.latitud},${a.longitud}`} target="_blank" style={{ color: "#2563eb", fontWeight: "bold" }}>
                       Ver mapa
                     </a>
                   ) : (
@@ -1321,66 +1229,5 @@ export default function AdminPage() {
         </section>
       )}
     </main>
-  );
-}
-
-const sectionStyle = {
-  border: "1px solid #cbd5e1",
-  borderRadius: 16,
-  padding: 20,
-  marginBottom: 30,
-  background: "rgba(255,255,255,0.95)",
-  backdropFilter: "blur(8px)",
-  color: "#000000",
-};
-
-const inputStyle = {
-  padding: 12,
-  color: "#000000",
-  background: "#ffffff",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-};
-
-const inputTableStyle = {
-  padding: 8,
-  width: "100%",
-  color: "#000000",
-  background: "#ffffff",
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  boxSizing: "border-box" as const,
-};
-
-function Tabla({
-  headers,
-  children,
-}: {
-  headers: string[];
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          background: "#ffffff",
-          color: "#000000",
-        }}
-      >
-        <thead>
-          <tr>
-            {headers.map((h) => (
-              <th key={h} style={thStyle}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>{children}</tbody>
-      </table>
-    </div>
   );
 }
