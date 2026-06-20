@@ -96,7 +96,10 @@ function mensajePuntualidad(puntualidad: string | null) {
 }
 
 function esMismoDia(fecha: string) {
-  return new Date(fecha).toLocaleDateString("es-MX") === new Date().toLocaleDateString("es-MX");
+  return (
+    new Date(fecha).toLocaleDateString("es-MX") ===
+    new Date().toLocaleDateString("es-MX")
+  );
 }
 
 export default function Home() {
@@ -105,7 +108,9 @@ export default function Home() {
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [empleadoId, setEmpleadoId] = useState("");
   const [pin, setPin] = useState("");
-  const [empleadoLogueado, setEmpleadoLogueado] = useState<Empleado | null>(null);
+  const [empleadoLogueado, setEmpleadoLogueado] = useState<Empleado | null>(
+    null
+  );
   const [mensaje, setMensaje] = useState("Cargando empleados...");
   const [cargando, setCargando] = useState(false);
 
@@ -398,7 +403,17 @@ export default function Home() {
       <main
         style={{
           minHeight: "100vh",
-          background: "linear-gradient(135deg, #16a34a, #0f172a)",
+          backgroundImage: `
+            linear-gradient(
+              rgba(15,23,42,0.78),
+              rgba(15,23,42,0.78)
+            ),
+            url('/banner-admin.png')
+          `,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          backgroundAttachment: "fixed",
           color: "#ffffff",
           display: "flex",
           alignItems: "center",
@@ -410,13 +425,14 @@ export default function Home() {
       >
         <section
           style={{
-            background: "rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.14)",
             border: "2px solid rgba(255,255,255,0.35)",
             borderRadius: 28,
             padding: 35,
             maxWidth: 420,
             width: "100%",
-            boxShadow: "0 18px 45px rgba(0,0,0,0.35)",
+            boxShadow: "0 18px 45px rgba(0,0,0,0.45)",
+            backdropFilter: "blur(10px)",
           }}
         >
           <div style={{ fontSize: 82, marginBottom: 15 }}>✅</div>
@@ -439,8 +455,17 @@ export default function Home() {
     <main
       style={{
         minHeight: "100vh",
-        background:
-          "linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #dc2626 100%)",
+        backgroundImage: `
+          linear-gradient(
+            rgba(15,23,42,0.78),
+            rgba(15,23,42,0.78)
+          ),
+          url('/banner-admin.png')
+        `,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
         padding: 20,
         fontFamily: "Arial, sans-serif",
         color: "#ffffff",
@@ -448,38 +473,47 @@ export default function Home() {
     >
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
         <section
-          style={{ textAlign: "center", marginBottom: 18, paddingTop: 10 }}
+          style={{
+            textAlign: "center",
+            marginBottom: 20,
+            paddingTop: 20,
+          }}
         >
           <h1
             style={{
-              fontSize: 34,
+              fontSize: 36,
               margin: 0,
               fontWeight: 900,
               letterSpacing: 0.5,
+              textShadow: "0 4px 16px rgba(0,0,0,0.9)",
+              color: "#ffffff",
             }}
           >
-            Asistencia Winmex
+            Control de Asistencia
           </h1>
 
           <p
             style={{
               marginTop: 8,
               marginBottom: 0,
-              color: "#e2e8f0",
-              fontSize: 15,
+              color: "#facc15",
+              fontSize: 16,
+              fontWeight: "bold",
+              textShadow: "0 3px 12px rgba(0,0,0,0.9)",
             }}
           >
-            GPS + Selfie + Sucursal
+            GPS • Selfie • Sucursal
           </p>
         </section>
 
         <section
           style={{
-            background: "#ffffff",
+            background: "rgba(255,255,255,0.96)",
             color: "#0f172a",
             borderRadius: 22,
             padding: 20,
-            boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
+            boxShadow: "0 22px 55px rgba(0,0,0,0.55)",
+            backdropFilter: "blur(8px)",
           }}
         >
           {!empleadoLogueado && (
@@ -723,9 +757,10 @@ export default function Home() {
         <p
           style={{
             textAlign: "center",
-            color: "#e2e8f0",
+            color: "#f8fafc",
             fontSize: 12,
             marginTop: 16,
+            textShadow: "0 2px 8px rgba(0,0,0,0.9)",
           }}
         >
           Permite cámara y ubicación para registrar asistencia.
