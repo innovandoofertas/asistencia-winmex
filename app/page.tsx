@@ -95,17 +95,23 @@ function mensajePuntualidad(puntualidad: string | null) {
   return "";
 }
 
+function esMismoDia(fecha: string) {
+  return new Date(fecha).toLocaleDateString("es-MX") === new Date().toLocaleDateString("es-MX");
+}
+
 export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [empleadoId, setEmpleadoId] = useState("");
   const [pin, setPin] = useState("");
-  const [empleadoLogueado, setEmpleadoLogueado] = useState<Empleado | null>(
-    null
-  );
+  const [empleadoLogueado, setEmpleadoLogueado] = useState<Empleado | null>(null);
   const [mensaje, setMensaje] = useState("Cargando empleados...");
   const [cargando, setCargando] = useState(false);
+
+  const [pantallaLista, setPantallaLista] = useState(false);
+  const [tituloListo, setTituloListo] = useState("");
+  const [detalleListo, setDetalleListo] = useState("");
 
   useEffect(() => {
     cargarEmpleados();
@@ -190,6 +196,21 @@ export default function Home() {
     setMensaje("Sesión cerrada.");
   }
 
+  function sacarEmpleadoConMensaje(titulo: string, detalle: string) {
+    setTituloListo(titulo);
+    setDetalleListo(detalle);
+    setPantallaLista(true);
+
+    localStorage.removeItem("sesionWinmexActiva");
+
+    setTimeout(() => {
+      setPantallaLista(false);
+      setEmpleadoLogueado(null);
+      setPin("");
+      setMensaje("Selecciona tu nombre e inicia sesión.");
+    }, 2500);
+  }
+
   async function iniciarCamara() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -270,10 +291,26 @@ export default function Home() {
     return data.publicUrl;
   }
 
+  async function yaRegistroHoy(empleadoId: string, tipo: "entrada" | "salida") {
+    const { data, error } = await supabase
+      .from("asistencias")
+      .select("id, created_at")
+      .eq("empleado_id", empleadoId)
+      .eq("tipo", tipo)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      throw new Error("No se pudo validar el registro del día.");
+    }
+
+    return (data || []).some((registro) => esMismoDia(registro.created_at));
+  }
+
   async function registrar(tipo: "entrada" | "salida") {
     try {
       setCargando(true);
-      setMensaje("📍 Obteniendo ubicación y tomando selfie...");
+      setMensaje("📍 Validando registro del día...");
 
       const empleado = empleadoLogueado;
 
@@ -281,6 +318,18 @@ export default function Home() {
         setMensaje("Primero inicia sesión con tu PIN.");
         return;
       }
+
+      const yaExiste = await yaRegistroHoy(empleado.id, tipo);
+
+      if (yaExiste) {
+        sacarEmpleadoConMensaje(
+          "⚠️ Ya registrado",
+          `Ya tienes una ${tipo} registrada el día de hoy.`
+        );
+        return;
+      }
+
+      setMensaje("📍 Obteniendo ubicación y tomando selfie...");
 
       const sucursal = empleado.sucursales_asistencia;
 
@@ -328,10 +377,11 @@ export default function Home() {
         return;
       }
 
-      setMensaje(
-        `${tipo === "entrada" ? "✅ Entrada" : "🚪 Salida"} registrada. ${mensajePuntualidad(
+      sacarEmpleadoConMensaje(
+        "✅ Listo",
+        `${tipo === "entrada" ? "Entrada" : "Salida"} registrada correctamente. ${mensajePuntualidad(
           puntualidad
-        )}. Distancia: ${Math.round(distancia)} m de ${sucursal.nombre}.`
+        )}.`
       );
     } catch (error) {
       console.error(error);
@@ -342,6 +392,48 @@ export default function Home() {
   }
 
   const empleadoSeleccionado = empleados.find((e) => e.id === empleadoId);
+
+  if (pantallaLista) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(135deg, #16a34a, #0f172a)",
+          color: "#ffffff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 25,
+          fontFamily: "Arial, sans-serif",
+          textAlign: "center",
+        }}
+      >
+        <section
+          style={{
+            background: "rgba(255,255,255,0.12)",
+            border: "2px solid rgba(255,255,255,0.35)",
+            borderRadius: 28,
+            padding: 35,
+            maxWidth: 420,
+            width: "100%",
+            boxShadow: "0 18px 45px rgba(0,0,0,0.35)",
+          }}
+        >
+          <div style={{ fontSize: 82, marginBottom: 15 }}>✅</div>
+
+          <h1 style={{ fontSize: 42, margin: "0 0 12px 0" }}>
+            {tituloListo}
+          </h1>
+
+          <p style={{ fontSize: 20, lineHeight: 1.4 }}>{detalleListo}</p>
+
+          <p style={{ marginTop: 22, opacity: 0.85 }}>
+            Cerrando sesión automáticamente...
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -355,7 +447,9 @@ export default function Home() {
       }}
     >
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
-        <section style={{ textAlign: "center", marginBottom: 18, paddingTop: 10 }}>
+        <section
+          style={{ textAlign: "center", marginBottom: 18, paddingTop: 10 }}
+        >
           <h1
             style={{
               fontSize: 34,
@@ -605,14 +699,16 @@ export default function Home() {
                   ? "#dcfce7"
                   : mensaje.includes("incorrecto") ||
                     mensaje.includes("No se pudo") ||
-                    mensaje.includes("Error")
+                    mensaje.includes("Error") ||
+                    mensaje.includes("Ya tienes")
                   ? "#fee2e2"
                   : "#e0f2fe",
                 color: mensaje.includes("registrada")
                   ? "#166534"
                   : mensaje.includes("incorrecto") ||
                     mensaje.includes("No se pudo") ||
-                    mensaje.includes("Error")
+                    mensaje.includes("Error") ||
+                    mensaje.includes("Ya tienes")
                   ? "#991b1b"
                   : "#075985",
                 fontWeight: "bold",
