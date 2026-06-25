@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import InstallButton from "./install-button";
 
 type Sucursal = {
   id: string;
@@ -505,6 +506,8 @@ export default function Home() {
             GPS • Selfie • Sucursal
           </p>
         </section>
+
+        <InstallButton />
 
         <section
           style={{
